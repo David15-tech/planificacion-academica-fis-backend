@@ -5,6 +5,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  VersionColumn,
 } from 'typeorm';
 
 @Entity('horario')
@@ -24,4 +25,7 @@ export class HorarioEntity {
   @ManyToOne(() => UsuarioEntity, (usuario) => usuario.horarios)
   @JoinColumn({ name: 'idUsuario' })
   usuario: UsuarioEntity;
+
+  @VersionColumn()
+  version: number; 
 }

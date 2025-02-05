@@ -6,6 +6,8 @@ import {
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
+  Unique,
+  VersionColumn,
 } from 'typeorm';
 import { ActividadEntity } from '../../actividades/entities/actividad.entity';
 import { HoraNoDisponibleEntity } from 'src/horas_no_disponibles/entities/hora_no_disponible.entity';
@@ -33,4 +35,7 @@ export class DocenteEntity {
     (horasNoDisponibles) => horasNoDisponibles.docente,
   )
   horasNoDisponibles?: HoraNoDisponibleEntity[];
+  
+  @VersionColumn()
+  version: number;
 }

@@ -1,5 +1,5 @@
 import { ActividadEntity } from '../../actividades/entities/actividad.entity';
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn, VersionColumn, Unique } from 'typeorm';
 
 @Entity('asignatura')
 export class AsignaturaEntity {
@@ -17,4 +17,8 @@ export class AsignaturaEntity {
 
   @OneToMany(() => ActividadEntity, (actividades) => actividades.asignatura)
   actividades?: ActividadEntity[];
+
+  @VersionColumn()
+  version: number;
+
 }

@@ -18,5 +18,12 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false
   },
-  "exclude": ["usr"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "features",              
+    "**/*.spec.ts",          
+    "**/*.test.ts"
+  ]
 }

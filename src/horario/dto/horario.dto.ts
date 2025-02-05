@@ -1,19 +1,18 @@
-import { IsDateString, IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class HorarioDto {
-  @IsDateString()
-  @IsNotEmpty()
-  public fechaCreacion: Date;
-
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  public horarioJson: string;
+  idUsuario: string;  // El ID del usuario (string, podría ser UUID)
 
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  public idUsuario: string;
+  descripcion: string;
 
+  @ApiProperty()
   @IsString()
-  @IsNotEmpty()
-  public descripcion: string;
+  horarioJson: string;  // Contenido JSON en forma de string
 }

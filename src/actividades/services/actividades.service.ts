@@ -40,7 +40,15 @@ export class ActividadesService {
     @InjectRepository(RestriccionActividadEntity)
     private restriccionActividadRespository: Repository<RestriccionActividadEntity>,
     private horasNoDisponiblesService: HorasNoDisponiblesService,
-  ) { }
+  ) {}
+
+  /**
+   * Pequeña función para introducir una pausa de 2s,
+   * permitiendo "forzar" condiciones de concurrencia.
+   */
+  private async delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
   validarDuracionActividad(actividad: ActividadEntity) {
     if (actividad.duracion <= this.limiteActividadDuracion) {
@@ -60,7 +68,6 @@ export class ActividadesService {
   //Formato fet
   formatTimeFet(restriccionHora: string) {
     // time = 09:00-10:00
-
     const firstPart = restriccionHora.split('-')[0];
     const secondPart = restriccionHora.split('-')[1];
 
@@ -72,7 +79,13 @@ export class ActividadesService {
     return firstHour + '-' + secondHour;
   }
 
+  // -----------------------------
+  //       CREAR ACTIVIDAD
+  // -----------------------------
   async crearActividad(actividad: CrearActividadDto): Promise<ActividadEntity> {
+    // Pausa de 2s
+    await this.delay(2000);
+
     const { idAsignatura, idDocente, idGrupo, idTipoAula } = actividad;
     const existeActividad = await this.actividadRespository.findOne({
       where: {
@@ -119,11 +132,16 @@ export class ActividadesService {
     return nuevaActividad;
   }
 
-  //Actualizar actividad
+  // -----------------------------
+  //    ACTUALIZAR ACTIVIDAD
+  // -----------------------------
   async actualizarActividadPorId(
     idActividad: number,
     actividadDto: ActualizarActividadDto,
   ): Promise<ActividadEntity> {
+    // Pausa de 2s
+    await this.delay(2000);
+
     const actividadExistente = await this.obtenerActividadPorId(idActividad);
     console.log('actividad: ', actividadExistente);
 
@@ -131,24 +149,46 @@ export class ActividadesService {
       throw new NotFoundException(`No existe la actividad con ID: ${idActividad}`);
     }
 
-    const asignatura = await this.asignaturaService.obtenerAsignaturaPorID(actividadDto.idAsignatura);
-    const docente = await this.docenteService.obtenerDocentePorID(actividadDto.idDocente);
-    const tipoAula = await this.tipoAulaService.obtenerTipoAulaPorId(actividadDto.idTipoAula);
-    const grupo = await this.grupoService.obtenerGrupoPorID(actividadDto.idGrupo);
+    const asignatura = await this.asignaturaService.obtenerAsignaturaPorID(
+      actividadDto.idAsignatura,
+    );
+    const docente = await this.docenteService.obtenerDocentePorID(
+      actividadDto.idDocente,
+    );
+    const tipoAula = await this.tipoAulaService.obtenerTipoAulaPorId(
+      actividadDto.idTipoAula,
+    );
+    const grupo = await this.grupoService.obtenerGrupoPorID(
+      actividadDto.idGrupo,
+    );
 
-    const nuevaActividad: ActividadEntity = {
-      ...actividadExistente,
-      docente: docente as DocenteEntity,
-      tipoAula: tipoAula,
-      grupo: grupo,
-      duracion: actividadDto.duracion,
-      asignatura: asignatura as AsignaturaEntity,
-    };
+    // Aquí construimos la misma entidad, con los cambios
+    actividadExistente.docente = docente as DocenteEntity;
+    actividadExistente.tipoAula = tipoAula as TipoAulaEntity;
+    actividadExistente.grupo = grupo as GrupoEntity;
+    actividadExistente.duracion = actividadDto.duracion;
+    actividadExistente.asignatura = asignatura as AsignaturaEntity;
 
-    await this.actividadRespository.update(idActividad, nuevaActividad);
-
-    return nuevaActividad;
-
+    // En lugar de "update(...)", usamos "save" para disparar Optimistic Lock
+    try {
+      const actividadActualizada = await this.actividadRespository.save(
+        actividadExistente,
+      );
+      return actividadActualizada;
+    } catch (error) {
+      // Si alguien ya cambió la versión en medio, TypeORM lanza:
+      // "OptimisticLockVersionMismatchError"
+      if (error.name === 'OptimisticLockVersionMismatchError') {
+        Logger.error(
+          'Conflicto de concurrencia al actualizar la actividad',
+          'OPTIMISTIC_LOCK_ERROR',
+        );
+        throw new BadGatewayException(
+          'La actividad ha sido modificada por otro usuario. Por favor, recarga e inténtalo de nuevo.',
+        );
+      }
+      throw error;
+    }
   }
 
   async obtenerActividades() {
@@ -193,6 +233,9 @@ export class ActividadesService {
 
   //METODO PARA ELIMINAR RESTRICCIONES
   async eliminarActividadPorId(idActividad: number) {
+    // Pausa de 2s
+    await this.delay(2000);
+
     const actividad = await this.actividadRespository.findOne({
       where: {
         id: idActividad,
@@ -204,7 +247,7 @@ export class ActividadesService {
       throw new Error('No existe la actividad');
     }
 
-    if(actividad.restricciones && actividad.restricciones.length>0){
+    if (actividad.restricciones && actividad.restricciones.length > 0) {
       await Promise.all(
         actividad.restricciones.map(async (restriccion) => {
           await this.restriccionActividadRespository.delete(restriccion.id);
@@ -215,11 +258,13 @@ export class ActividadesService {
     await this.actividadRespository.delete(idActividad);
     console.log('Restriccion eliminada');
     return actividad;
-
   }
 
   //METODO PARA CREAR RESTRICCIONES
   async crearRestriccion(restriccion: CrearRestriccionDto) {
+    // Pausa de 2s
+    await this.delay(2000);
+
     const espacioFisico =
       await this.espacioFisicoService.obtenerEspacioFisicoPorId(
         restriccion.idEspacioFisico,
@@ -230,27 +275,14 @@ export class ActividadesService {
       },
       relations: ['docente'],
     });
-    const exiteRestriccion = await this.restriccionActividadRespository.findOne(
-      {
-        where: {
-          hora: restriccion.hora,
-          dia: restriccion.dia,
-          espacioFisico: espacioFisico,
-        },
-        relations: ['actividad', 'actividad.docente'],
-      },
-    );
-
-    /*
-    // Verificar cuántos registros existen con los mismos parámetros
-    const cantidadRegistros = await this.restriccionActividadRespository.count({
+    const exiteRestriccion = await this.restriccionActividadRespository.findOne({
       where: {
         hora: restriccion.hora,
         dia: restriccion.dia,
-        espacioFisico: espacioFisico
-      }
+        espacioFisico: espacioFisico,
+      },
+      relations: ['actividad', 'actividad.docente'],
     });
-    */
 
     const horasNoDisponiblesDocente =
       await this.horasNoDisponiblesService.obtenerHorasDiasNoDisponiblesDelDocente(
@@ -258,7 +290,9 @@ export class ActividadesService {
       );
 
     horasNoDisponiblesDocente.map((horaNoDisponible) => {
-      const horaFormato = `${horaNoDisponible.hora_inicio}:00-${horaNoDisponible.hora_inicio + 1}:00`;
+      const horaFormato = `${horaNoDisponible.hora_inicio}:00-${
+        horaNoDisponible.hora_inicio + 1
+      }:00`;
       console.log(
         this.verificarDiaHora(
           restriccion.dia.toUpperCase(),
@@ -288,12 +322,6 @@ export class ActividadesService {
         data: { restriccion: exiteRestriccion },
       });
     }
-
-    /*
-    if (cantidadRegistros == 1) {
-      throw new Error('Ya existe una restricción con estos parámetros.');
-    }
-    */
 
     await this.restriccionActividadRespository.save({
       hora: restriccion.hora,
@@ -386,6 +414,9 @@ export class ActividadesService {
   }
 
   async eliminarRestriccionPorId(idRestriccion: number) {
+    // Pausa de 2s
+    await this.delay(2000);
+
     const restriccion = await this.restriccionActividadRespository.findOne({
       where: {
         id: idRestriccion,

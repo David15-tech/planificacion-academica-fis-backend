@@ -26,4 +26,14 @@ export class ActualizarActividadDto {
   @IsNumber()
   @IsNotEmpty()
   duracion: number;
+
+  /**
+   * Campo indispensable para el Optimistic Locking.
+   * El front-end debe enviar aquí la versión
+   * que el usuario tenía al momento de editar.
+   */
+  @ApiProperty({ description: 'Versión para manejar Optimistic Locking' })
+  @IsNumber()
+  @IsNotEmpty()
+  version: number;
 }

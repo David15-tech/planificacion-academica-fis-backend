@@ -1,24 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class CarreraDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  codigo: string;
-
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
   nombre: string;
 
   @ApiProperty()
-  @IsNumber()
-  @IsNotEmpty()
-  duracion: number;
-
-  @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  modalidad: string;
+  codigo: string;
 }

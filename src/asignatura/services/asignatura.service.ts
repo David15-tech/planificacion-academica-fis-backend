@@ -1,6 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeleteResult, Repository, UpdateResult } from 'typeorm';
+import {
+  DeleteResult,
+  Repository,
+  Connection,
+  QueryRunner,
+} from 'typeorm';
 import { AsignaturaDto } from '../dto/asignatura.dto';
 import { AsignaturaEntity } from '../entities/asignatura.entity';
 
@@ -8,7 +17,10 @@ import { AsignaturaEntity } from '../entities/asignatura.entity';
 export class AsignaturaService {
   constructor(
     @InjectRepository(AsignaturaEntity)
-    private asignaturaRepository: Repository<AsignaturaEntity>,
+    private readonly asignaturaRepository: Repository<AsignaturaEntity>,
+
+    // Inyectamos la conexión para poder usar QueryRunner en algunos métodos
+    private connection: Connection,
   ) {}
 
   /* ====================================================================================================================== */
@@ -16,38 +28,52 @@ export class AsignaturaService {
   /* ====================================================================================================================== */
 
   async crearUnaAsignatura(asignaturaDto: AsignaturaDto) {
+    // Verificamos si ya existe usando la función obtenerAsignaturaPorCodigo
     const existenciaAsignatura = await this.obtenerAsignaturaPorCodigo(
       asignaturaDto.codigo,
     );
+
+    // Si "existenciaAsignatura" es NotFoundException, significa que NO existe en la BD
     if (existenciaAsignatura instanceof NotFoundException) {
       const asignaturaNueva = {
         codigo: asignaturaDto.codigo,
         nombre: asignaturaDto.nombre,
         creditos: Number(asignaturaDto.creditos),
       };
-      await this.asignaturaRepository.save(asignaturaNueva);
-      return {
-        mensaje:
-          'Se creó la asignatura ' +
-          asignaturaDto.codigo +
-          ' - ' +
-          asignaturaDto.nombre +
-          ' existosamente.',
-      };
+
+      try {
+        // Intentamos guardar. Si la BD detecta que el codigo es duplicado, lanzará error con code "SQLITE_CONSTRAINT" o "23505"
+        await this.asignaturaRepository.save(asignaturaNueva);
+        return {
+          mensaje:
+            `Se creó la asignatura ${asignaturaDto.codigo} - ` +
+            `${asignaturaDto.nombre} existosamente.`,
+        };
+      } catch (error) {
+        // Atrapar violaciones de restricciones únicas en Postgres y SQLite
+        if (
+          error.code === '23505' ||           // Postgres
+          error.code === 'SQLITE_CONSTRAINT'  // SQLite (posible "SQLITE_CONSTRAINT_UNIQUE")
+        ) {
+          return {
+            mensaje: `La asignatura ${asignaturaDto.codigo} - ` +
+              `${asignaturaDto.nombre} ya se encuentra registrada.`,
+          };
+        }
+        throw error; // Para otros errores, relanzamos la excepción
+      }
     } else {
+      // Aquí significa que la asignatura SÍ existe (existenciaAsignatura es una entidad real)
       return {
         mensaje:
-          'La asignatura ' +
-          asignaturaDto.codigo +
-          ' - ' +
-          asignaturaDto.nombre +
-          ' ya se encuentra registrada.',
+          `La asignatura ${asignaturaDto.codigo} - ` +
+          `${asignaturaDto.nombre} ya se encuentra registrada.`,
       };
     }
   }
 
   /* ====================================================================================================================== */
-  /* ====================================== VARIAS ASIGNATURAS EN LA BASE DE DATOS ====================================== */
+  /* ====================================== CREAR VARIAS ASIGNATURAS EN LA BASE DE DATOS ================================== */
   /* ====================================================================================================================== */
 
   async crearVariasAsignaturas(arregloAsignaturas: AsignaturaDto[]) {
@@ -56,31 +82,41 @@ export class AsignaturaService {
     const asignaturasGuardadas: AsignaturaDto[] = [];
     let cantidadAsignaturaGuardada = 0;
 
-    for (let i = 0; i < arregloAsignaturas.length; i++) {
-      // Busqueda de las asignaturas
+    for (const asignatura of arregloAsignaturas) {
       const existenciaAsignaturaArchivo = await this.obtenerAsignaturaPorCodigo(
-        arregloAsignaturas[i].codigo,
+        asignatura.codigo,
       );
+
       if (existenciaAsignaturaArchivo instanceof NotFoundException) {
         const asignaturaNueva = {
-          codigo: arregloAsignaturas[i].codigo,
-          nombre: arregloAsignaturas[i].nombre,
-          creditos: Number(arregloAsignaturas[i].creditos),
+          codigo: asignatura.codigo,
+          nombre: asignatura.nombre,
+          creditos: Number(asignatura.creditos),
         };
-        await this.asignaturaRepository.save(asignaturaNueva);
-        // Arreglo de asignaturas guardadas
-        asignaturasGuardadas[cantidadAsignaturaGuardada] =
-          arregloAsignaturas[i];
-        cantidadAsignaturaGuardada++;
+
+        try {
+          await this.asignaturaRepository.save(asignaturaNueva);
+          // Agregamos al arreglo de asignaturas guardadas
+          asignaturasGuardadas[cantidadAsignaturaGuardada] = asignatura;
+          cantidadAsignaturaGuardada++;
+        } catch (error) {
+          // Error de índice único (código 23505 en Postgres o 'SQLITE_CONSTRAINT' en SQLite)
+          if (error.code === '23505' || error.code === 'SQLITE_CONSTRAINT') {
+            asignaturasNoGuardadas[cantidadAsignaturaNoGuardada] = asignatura;
+            cantidadAsignaturaNoGuardada++;
+          } else {
+            throw error;
+          }
+        }
       } else {
-        // Arreglo de asignaturas no guardadas
-        asignaturasNoGuardadas[cantidadAsignaturaNoGuardada] =
-          arregloAsignaturas[i];
+        // Agregamos al arreglo de asignaturas no guardadas
+        asignaturasNoGuardadas[cantidadAsignaturaNoGuardada] = asignatura;
         cantidadAsignaturaNoGuardada++;
       }
     }
-    // Envió de resultados
-    if (cantidadAsignaturaNoGuardada == 0) {
+
+    // Envío de resultados
+    if (cantidadAsignaturaNoGuardada === 0) {
       return {
         mensaje:
           'Se han creado exitosamente ' +
@@ -91,11 +127,8 @@ export class AsignaturaService {
     } else {
       // Crear un arreglo con los nombres de las asignaturas duplicadas
       const nombreAsignaturasDuplicados = asignaturasNoGuardadas.map(
-        (asignatura) => {
-          return asignatura.codigo + ' - ' + asignatura.nombre;
-        },
+        (asig) => `${asig.codigo} - ${asig.nombre}`,
       );
-
       const nombresImprimibles = nombreAsignaturasDuplicados.join(', ');
 
       return {
@@ -118,17 +151,26 @@ export class AsignaturaService {
   async actualizarAsignaturaPorID(
     idAsignatura: string,
     asignaturaDto: AsignaturaDto,
-  ): Promise<UpdateResult | NotFoundException> {
+  ): Promise<AsignaturaEntity | NotFoundException> {
+    // Verificamos si la asignatura existe
     const asignatura = await this.obtenerAsignaturaPorID(idAsignatura);
-    if (asignatura) {
-      return await this.asignaturaRepository.update(
-        idAsignatura,
-        asignaturaDto,
-      );
-    } else {
-      return new NotFoundException(
-        `No existe la asignatura con id ${idAsignatura}`,
-      );
+    if (asignatura instanceof NotFoundException) {
+      // Si no existe, devolvemos la excepción
+      return asignatura;
+    }
+
+    // Mezclamos los campos nuevos con la asignatura existente
+    this.asignaturaRepository.merge(asignatura, asignaturaDto);
+
+    try {
+      // Usamos save(...) para que TypeORM maneje el @VersionColumn
+      // y lance error si hay un conflicto de versión (Optimistic Lock).
+      const asignaturaActualizada =
+        await this.asignaturaRepository.save(asignatura);
+      return asignaturaActualizada;
+    } catch (error) {
+      // Manejo custom del error de concurrencia, si fuera el caso
+      throw error;
     }
   }
 
@@ -193,5 +235,56 @@ export class AsignaturaService {
 
   async obtenerAsignatura(): Promise<AsignaturaEntity[]> {
     return this.asignaturaRepository.find();
+  }
+
+  /* ====================================================================================================================== */
+  /* ======================= EJEMPLO: CREAR VARIAS ASIGNATURAS USANDO TRANSACCIONES (OPCIONAL) ============================ */
+  /* ====================================================================================================================== */
+
+  async crearVariasAsignaturasConTransaccion(
+    arregloAsignaturas: AsignaturaDto[],
+  ) {
+    const queryRunner: QueryRunner = this.connection.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const asignaturasGuardadas: AsignaturaDto[] = [];
+      const asignaturasNoGuardadas: AsignaturaDto[] = [];
+
+      for (const asignaturaDto of arregloAsignaturas) {
+        try {
+          const asignatura = queryRunner.manager.create(AsignaturaEntity, {
+            codigo: asignaturaDto.codigo,
+            nombre: asignaturaDto.nombre,
+            creditos: +asignaturaDto.creditos,
+          });
+          await queryRunner.manager.save(asignatura);
+          asignaturasGuardadas.push(asignaturaDto);
+        } catch (error) {
+          if (error.code === '23505' || error.code === 'SQLITE_CONSTRAINT') {
+            // Asignatura duplicada
+            asignaturasNoGuardadas.push(asignaturaDto);
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        mensaje: `Se han creado ${asignaturasGuardadas.length} asignaturas. Hubo ${asignaturasNoGuardadas.length} duplicadas.`,
+        asignaturasGuardadas,
+        asignaturasNoGuardadas,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw new BadGatewayException(
+        'Error al crear las asignaturas de forma masiva.',
+      );
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

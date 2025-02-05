@@ -7,6 +7,8 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  Unique,
+  VersionColumn,
 } from 'typeorm';
 
 @Entity('espacioFisico')
@@ -31,4 +33,7 @@ export class EspacioFisicoEntity {
     (restriccionActividad) => restriccionActividad.espacioFisico,
   )
   restricciones?: RestriccionActividadEntity[];
+
+  @VersionColumn()
+  version: number;
 }

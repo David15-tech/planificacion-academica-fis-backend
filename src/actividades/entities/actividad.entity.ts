@@ -9,6 +9,7 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  VersionColumn,
 } from 'typeorm';
 import { RestriccionActividadEntity } from './restriccion-actividad.entity';
 
@@ -21,7 +22,7 @@ export class ActividadEntity {
     type: 'boolean',
     default: true,
   })
-  estado: boolean; // true for active
+  estado: boolean; // true para "activa"
 
   @Column()
   duracion: number;
@@ -30,27 +31,19 @@ export class ActividadEntity {
   numeroEstudiantes: number;
 
   @ManyToOne(() => DocenteEntity, (docente) => docente.actividades)
-  @JoinColumn({
-    name: 'idDocente',
-  })
+  @JoinColumn({ name: 'idDocente' })
   docente: DocenteEntity;
 
   @ManyToOne(() => TipoAulaEntity, (tipo) => tipo.actividades)
-  @JoinColumn({
-    name: 'idTipoAula',
-  })
+  @JoinColumn({ name: 'idTipoAula' })
   tipoAula: TipoAulaEntity;
 
   @ManyToOne(() => AsignaturaEntity, (asignatura) => asignatura.actividades)
-  @JoinColumn({
-    name: 'idAsignatura',
-  })
+  @JoinColumn({ name: 'idAsignatura' })
   asignatura: AsignaturaEntity;
 
   @ManyToOne(() => GrupoEntity, (grupo) => grupo.actividades)
-  @JoinColumn({
-    name: 'idGrupo',
-  })
+  @JoinColumn({ name: 'idGrupo' })
   grupo: GrupoEntity;
 
   @OneToMany(
@@ -58,4 +51,13 @@ export class ActividadEntity {
     (restriccion) => restriccion.actividad,
   )
   restricciones: RestriccionActividadEntity[];
+
+  /**
+   * Columna para el "optimistic locking" de TypeORM.
+   * Cada vez que se hace un "save()", se incrementa.
+   * Si la versión aquí no coincide con la de la base de datos,
+   * TypeORM lanza un OptimisticLockVersionMismatchError.
+   */
+  @VersionColumn()
+  version: number;
 }
