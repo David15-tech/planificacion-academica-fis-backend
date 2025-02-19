@@ -36,6 +36,6 @@ export class DocenteEntity {
   )
   horasNoDisponibles?: HoraNoDisponibleEntity[];
   
-  @VersionColumn()
+  @VersionColumn({ default: 1 })
   version: number;
 }

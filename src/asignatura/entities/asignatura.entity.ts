@@ -18,7 +18,7 @@ export class AsignaturaEntity {
   @OneToMany(() => ActividadEntity, (actividades) => actividades.asignatura)
   actividades?: ActividadEntity[];
 
-  @VersionColumn()
+  @VersionColumn({ default: 1 })
   version: number;
 
 }

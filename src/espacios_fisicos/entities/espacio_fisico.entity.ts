@@ -34,6 +34,6 @@ export class EspacioFisicoEntity {
   )
   restricciones?: RestriccionActividadEntity[];
 
-  @VersionColumn()
+  @VersionColumn({ default: 1 })
   version: number;
 }

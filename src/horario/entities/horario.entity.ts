@@ -6,6 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   VersionColumn,
+  CreateDateColumn,
 } from 'typeorm';
 
 @Entity('horario')
@@ -13,7 +14,7 @@ export class HorarioEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar' })
+  @CreateDateColumn()
   fechaCreacion: Date;
 
   @Column({ type: 'text' })
@@ -26,6 +27,6 @@ export class HorarioEntity {
   @JoinColumn({ name: 'idUsuario' })
   usuario: UsuarioEntity;
 
-  @VersionColumn()
-  version: number; 
+  @VersionColumn({ default: 1 })
+  version: number;
 }

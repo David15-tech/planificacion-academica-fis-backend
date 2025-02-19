@@ -58,6 +58,6 @@ export class ActividadEntity {
    * Si la versión aquí no coincide con la de la base de datos,
    * TypeORM lanza un OptimisticLockVersionMismatchError.
    */
-  @VersionColumn()
+  @VersionColumn({ default: 1 })
   version: number;
 }

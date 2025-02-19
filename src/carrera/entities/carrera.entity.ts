@@ -1,8 +1,11 @@
+import { NivelEntity } from '../../../src/niveles/entities/nivel.entity';
 import {
   Column,
   Entity,
   PrimaryGeneratedColumn,
   VersionColumn,
+  ManyToOne,
+  OneToMany,
   Unique,
 } from 'typeorm';
 
@@ -12,12 +15,21 @@ export class CarreraEntity {
   @PrimaryGeneratedColumn('uuid') // Usamos UUID
   id: string;
 
-  @Column()
+  @Column({ length: 50 })
   nombre: string;
 
-  @Column()
+  @Column({ length: 50, unique: true })
   codigo: string;
 
-  @VersionColumn()
-  version: number; // Para el bloqueo optimista
+  @Column()
+  duracion: number;
+
+  @Column({ length: 50 })
+  modalidad: string;
+
+  @VersionColumn({ default: 1 })
+  version: number;
+
+  @OneToMany(() => NivelEntity, (nivel) => nivel.carrera)
+  niveles: NivelEntity[];
 }
